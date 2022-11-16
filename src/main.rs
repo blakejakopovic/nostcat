@@ -46,6 +46,14 @@ fn main() {
             socket.write_message(Message::Close(None)).unwrap();
             return;
           }
+
+          // Handle NIP-01: NOTICE
+          data if data.starts_with(&r#"["NOTICE"#) => {
+            println!("{}", data);
+            socket.write_message(Message::Close(None)).unwrap();
+            return;
+          }
+
           _ => {
             println!("{}", data);
           }
