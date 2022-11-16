@@ -40,9 +40,11 @@ fn main() {
             return;
           }
 
-          // TODO: Handle NIP-20: Command Results
+          // Handle NIP-20: Command Results
           data if data.starts_with(&r#"["OK""#) => {
             println!("{}", data);
+            socket.write_message(Message::Close(None)).unwrap();
+            return;
           }
           _ => {
             println!("{}", data);
