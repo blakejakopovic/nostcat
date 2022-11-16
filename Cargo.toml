@@ -1,0 +1,11 @@
+[package]
+name    = "nostcat"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+websocket = "0.24.0"
+tungstenite = {version = "0.16.0", features = ["native-tls"]}
+url = "2.2.2"
