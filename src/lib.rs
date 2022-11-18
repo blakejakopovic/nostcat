@@ -13,7 +13,7 @@ use url::Url;
 // }
 
 pub fn exit_with_error(msg: &str) -> ! {
-    println!("{}", msg);
+    eprintln!("{}", msg);
     process::exit(1)
 }
 
