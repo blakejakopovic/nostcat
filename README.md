@@ -23,12 +23,18 @@ nostcat wss://relay.damus.io |
 jq '.[2].content'
 ```
 
-Output info log messages which can help when debugging
+Output info log messages which can assist with debugging
 ```shell
 $ echo '["REQ", "RAND", {"kinds": [1], "limit": 8}]' | RUST_LOG=info nostcat wss://relay.damus.io
 ```
 
 ## Getting started
+Using Cargo to install (requires ~/.cargo/bin to be in PATH)
+```shell
+$ cargo install nostcat
+```
+
+Building from source
 ```shell
 $ git clone https://github.com/blakejakopovic/nostcat
 $ cargo build --release

@@ -1,7 +1,12 @@
 [package]
-name    = "nostcat"
-version = "0.1.0"
+name = "nostcat"
+description = "Quick and dirty websocket client for nostr relay scripting"
+version = "0.2.0"
 edition = "2021"
+repository = "https://github.com/blakejakopovic/nostcat"
+license-file = "LICENSE.txt"
+readme = "README.md"
+keywords = ["nostr", "websocket", "cli"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
