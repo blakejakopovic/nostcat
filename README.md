@@ -35,6 +35,13 @@ $ echo '["REQ", "RAND", {"kinds": [1], "limit": 8}]' |
   RUST_LOG=info nostcat wss://relay.damus.io
 ```
 
+Pipe events from one server to another (currently limited to 1 event at a time)
+```shell
+echo '["REQ", "CID", {"limit": 1}]' | nostcat wss://relay.damus.io |
+  jq -c 'del(.[1])' |
+  wss://nostr.ono.re
+```
+
 ## Getting started
 Using Cargo to install (requires ~/.cargo/bin to be in PATH)
 ```shell
