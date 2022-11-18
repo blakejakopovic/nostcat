@@ -1,65 +1,103 @@
+extern crate log;
+
 use std::io::{self};
+use std::process;
 use tungstenite::{connect, Message};
 use url::Url;
 
+
+// TODO: Review https://github.com/snapview/tokio-tungstenite/blob/master/examples/client.rs
+
+// enum CommandResult {
+//   0: REQUEST(str, str)
+//   1: EVENT(str, str, str)
+//   2: OK(str, str)
+//   3: NOTICE(str)
+// }
+
+fn exit_with_error(msg: &str) -> ! {
+    println!("{}", msg);
+    process::exit(1)
+}
+
 fn main() {
 
-  // First argument is server url
-  let url = std::env::args().nth(1).expect("Missing websocket url");
+    env_logger::init();
 
-  // Connect to websocket
-  let (mut socket, _response) = connect(
-      Url::parse(&url).unwrap()
-  ).expect("Can't connect to websocket");
+    let url_str = std::env::args().nth(1).unwrap_or_else(|| {
+        exit_with_error("Missing ws:// or wss:// websocket url argument")
+    });
 
-  // TODO: handle connection failure
+    let url = Url::parse(&url_str).unwrap_or_else(|err| {
+        exit_with_error(&format!("Unable to parse websocket url: {}", err))
+    });
 
-  // Handle input from pipe or stdin prompt
-  let mut input = String::new();
-  io::stdin()
-      .read_line(&mut input)
-      .expect("Failed to read from input");
-  input = input.trim().to_string();
+    // TODO: Need to add connection timeout, as currently hangs for failed connections
+    let (mut socket, response) = connect(url).unwrap_or_else(|err| {
+        exit_with_error(&format!("Unable to connect to websocket server: {}", err))
+    });
 
-  // Send input to websocket
-  socket.write_message(Message::Text(input)).unwrap();
+    log::info!("Connected to websocket server");
+    log::info!("Response HTTP code: {}", response.status());
 
-  loop {
-    // Process received messages
-    let msg = socket.read_message().expect("Error reading message");
+    // Handle input from pipe or stdin prompt
+    let mut input = String::new();
+    io::stdin().read_line(&mut input).unwrap_or_else(|err| {
+        exit_with_error(&format!("Failed to read from stdin: {}", err))
+    });
 
-    match msg {
+    input = input.trim().to_string();
 
-      // Process text only messages for now
-      Message::Text(data) => {
+    socket.write_message(Message::Text(input.to_owned())).unwrap_or_else(|err| {
+        exit_with_error(&format!("Failed to write to websocket: {}", err))
+    });
 
-        match data {
-          // Handle NIP-15: End of Stored Events Notice
-          data if data.starts_with(&r#"["EOSE""#) => {
-            socket.write_message(Message::Close(None)).unwrap();
-            return;
-          }
+    log::info!("Sent data: {}", input);
 
-          // Handle NIP-20: Command Results
-          data if data.starts_with(&r#"["OK""#) => {
-            println!("{}", data);
-            socket.write_message(Message::Close(None)).unwrap();
-            return;
-          }
+    loop {
 
-          // Handle NIP-01: NOTICE
-          data if data.starts_with(&r#"["NOTICE"#) => {
-            println!("{}", data);
-            socket.write_message(Message::Close(None)).unwrap();
-            return;
-          }
+        let msg = socket.read_message().unwrap_or_else(|err| {
+            exit_with_error(&format!("Unable to read websocket messages: {}", err))
+        });
 
-          _ => {
-            println!("{}", data);
-          }
+        match msg {
+
+            Message::Text(data) => {
+
+              log::info!("Received data: {}", data);
+
+                match data {
+
+                    // Handle NIP-15: End of Stored Events Notice
+                    data if data.starts_with(&r#"["EOSE""#) => {
+                        socket.write_message(Message::Close(None)).unwrap();
+                        return
+                    },
+
+                    // Handle NIP-20: Command Results
+                    data if data.starts_with(&r#"["OK""#) => {
+                        println!("{}", data);
+                        socket.write_message(Message::Close(None)).unwrap();
+                        return
+                    },
+
+                    // Handle NIP-01: NOTICE
+                    data if data.starts_with(&r#"["NOTICE""#) => {
+                        println!("{}", data);
+                        socket.write_message(Message::Close(None)).unwrap();
+                        return
+                    },
+
+                    // Handle all other text data
+                    _ => {
+                        println!("{}", data);
+                    }
+                }
+            },
+
+            _ => {
+                exit_with_error(&format!("Received unsupported websocket data type (non-text): {}", msg))
+            }
         }
-      }
-      _ => {}
     }
-  }
 }
