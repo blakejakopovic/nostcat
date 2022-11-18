@@ -1,4 +1,4 @@
-use std::io::{self};
+
 use std::process;
 use tungstenite::{connect, Message};
 use url::Url;
@@ -17,7 +17,14 @@ pub fn exit_with_error(msg: &str) -> ! {
     process::exit(1)
 }
 
-pub fn run(url: Url) {
+pub fn run(url_str: &String, input: &String) -> Result<String, String> {
+
+    let urx = &url_str;
+
+    let url = Url::parse(urx).unwrap_or_else(|err| {
+        exit_with_error(&format!("Unable to parse websocket url: {}", err))
+    });
+
     // TODO: Need to add connection timeout, as currently hangs for failed connections
     let (mut socket, response) = connect(url).unwrap_or_else(|err| {
         exit_with_error(&format!("Unable to connect to websocket server: {}", err))
@@ -26,26 +33,19 @@ pub fn run(url: Url) {
     log::info!("Connected to websocket server");
     log::info!("Response HTTP code: {}", response.status());
 
-    // Handle input from pipe or stdin prompt
-    let mut input = String::new();
-    io::stdin().read_line(&mut input).unwrap_or_else(|err| {
-        exit_with_error(&format!("Failed to read from stdin: {}", err))
-    });
-
-    input = input.trim().to_string();
-
     socket.write_message(Message::Text(input.to_owned())).unwrap_or_else(|err| {
         exit_with_error(&format!("Failed to write to websocket: {}", err))
     });
 
     log::info!("Sent data: {}", input);
 
-    loop {
+    'run_loop: loop {
 
         let msg = socket.read_message().unwrap_or_else(|err| {
             exit_with_error(&format!("Unable to read websocket messages: {}", err))
         });
 
+        let mut result = String::new();
         match msg {
 
             Message::Text(data) => {
@@ -57,32 +57,32 @@ pub fn run(url: Url) {
                     // Handle NIP-15: End of Stored Events Notice
                     data if data.starts_with(&r#"["EOSE""#) => {
                         socket.write_message(Message::Close(None)).unwrap();
-                        return
+                        break 'run_loop Ok(result.to_string());
                     },
 
                     // Handle NIP-20: Command Results
                     data if data.starts_with(&r#"["OK""#) => {
-                        println!("{}", data);
                         socket.write_message(Message::Close(None)).unwrap();
-                        return
+                        result.push_str(&data.to_string());
+                        break 'run_loop Ok(result.to_string());
                     },
 
                     // Handle NIP-01: NOTICE
                     data if data.starts_with(&r#"["NOTICE""#) => {
-                        println!("{}", data);
                         socket.write_message(Message::Close(None)).unwrap();
-                        return
+                        result.push_str(&data.to_string());
+                        break 'run_loop Ok(result.to_string());
                     },
 
                     // Handle all other text data
                     _ => {
-                        println!("{}", data);
+                        result.push_str(&data.to_string());
                     }
                 }
             },
 
             _ => {
-                exit_with_error(&format!("Received unsupported websocket data type (non-text): {}", msg))
+                break 'run_loop Err(format!("Received unsupported websocket data type (non-text): {}", msg));
             }
         }
     }
