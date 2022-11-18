@@ -31,7 +31,8 @@ $ echo '["REQ", "RAND", {"kinds": [1], "limit": 8}]' |
 
 Output info log messages which can assist with debugging
 ```shell
-$ echo '["REQ", "RAND", {"kinds": [1], "limit": 8}]' | RUST_LOG=info nostcat wss://relay.damus.io
+$ echo '["REQ", "RAND", {"kinds": [1], "limit": 8}]' |
+  RUST_LOG=info nostcat wss://relay.damus.io
 ```
 
 ## Getting started
