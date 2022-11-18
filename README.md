@@ -23,6 +23,12 @@ nostcat wss://relay.damus.io |
 jq '.[2].content'
 ```
 
+Sort and unique results with multiple servers (dedupe)
+```shell
+$ echo '["REQ", "RAND", {"kinds": [1], "limit": 8}]' |
+  nostcat --unique wss://relay.damus.io wss://nostr.ono.re
+```
+
 Output info log messages which can assist with debugging
 ```shell
 $ echo '["REQ", "RAND", {"kinds": [1], "limit": 8}]' | RUST_LOG=info nostcat wss://relay.damus.io

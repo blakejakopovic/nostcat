@@ -1,89 +1,79 @@
-
-use std::process;
 use tungstenite::{connect, Message};
 use url::Url;
 
-// TODO: Review https://github.com/snapview/tokio-tungstenite/blob/master/examples/client.rs
-
-// enum CommandResult {
-//   0: REQUEST(str, str)
-//   1: EVENT(str, str, str)
-//   2: OK(str, str)
-//   3: NOTICE(str)
-// }
-
-pub fn exit_with_error(msg: &str) -> ! {
-    eprintln!("{}", msg);
-    process::exit(1)
-}
-
-pub fn run(url_str: &String, input: &String) -> Result<String, String> {
+pub fn run(url_str: &String, input: &String) -> Result<Vec<String>, String> {
 
     let urx = &url_str;
 
-    let url = Url::parse(urx).unwrap_or_else(|err| {
-        exit_with_error(&format!("Unable to parse websocket url: {}", err))
-    });
+    let url = match Url::parse(urx) {
+      Ok(url) => url,
+      Err(err) => return Err(format!("Unable to parse websocket url: {}", err))
+    };
 
-    // TODO: Need to add connection timeout, as currently hangs for failed connections
-    let (mut socket, response) = connect(url).unwrap_or_else(|err| {
-        exit_with_error(&format!("Unable to connect to websocket server: {}", err))
-    });
+    // TODO: Need to add connection timeout, as currently it hangs for bad/failed connections
+    let (mut socket, response) = match connect(url) {
+        Ok((socket, response)) => (socket, response),
+        Err(err) => return Err(format!("Unable to connect to websocket server: {}", err))
+    };
 
-    log::info!("Connected to websocket server");
-    log::info!("Response HTTP code: {}", response.status());
+    log::info!("Connected to websocket server -- {}", url_str);
+    log::info!("Response HTTP code -- {}: {}", url_str, response.status());
 
-    socket.write_message(Message::Text(input.to_owned())).unwrap_or_else(|err| {
-        exit_with_error(&format!("Failed to write to websocket: {}", err))
-    });
+    match socket.write_message(Message::Text(input.to_owned())) {
+        Ok(_) => (),
+        Err(err) => return Err(format!("Failed to write to websocket: {}", err))
+    };
 
-    log::info!("Sent data: {}", input);
+    log::info!("Sent data -- {}: {}", url_str, input);
+
+    let mut result: Vec<String> = Vec::new();
 
     'run_loop: loop {
 
-        let msg = socket.read_message().unwrap_or_else(|err| {
-            exit_with_error(&format!("Unable to read websocket messages: {}", err))
-        });
+        // TODO: Review better error handing for this
+        let msg = socket.read_message().unwrap();
 
-        let mut result = String::new();
         match msg {
 
             Message::Text(data) => {
 
-              log::info!("Received data: {}", data);
+              log::info!("Received data -- {}: {}", url_str, data);
 
                 match data {
 
                     // Handle NIP-15: End of Stored Events Notice
                     data if data.starts_with(&r#"["EOSE""#) => {
                         socket.write_message(Message::Close(None)).unwrap();
-                        break 'run_loop Ok(result.to_string());
+                        // Skip pushing EOSE output to results
+                        break 'run_loop
                     },
 
                     // Handle NIP-20: Command Results
                     data if data.starts_with(&r#"["OK""#) => {
                         socket.write_message(Message::Close(None)).unwrap();
-                        result.push_str(&data.to_string());
-                        break 'run_loop Ok(result.to_string());
+                        result.push(data);
+                        break 'run_loop
                     },
 
                     // Handle NIP-01: NOTICE
                     data if data.starts_with(&r#"["NOTICE""#) => {
                         socket.write_message(Message::Close(None)).unwrap();
-                        result.push_str(&data.to_string());
-                        break 'run_loop Ok(result.to_string());
+                        result.push(data);
+                        break 'run_loop
                     },
 
                     // Handle all other text data
                     _ => {
-                        result.push_str(&data.to_string());
+                        result.push(data)
                     }
                 }
             },
 
             _ => {
-                break 'run_loop Err(format!("Received unsupported websocket data type (non-text): {}", msg));
+                return Err(format!("Received non-text websocket data: {}", msg));
             }
         }
     }
+
+    return Ok(result)
 }
