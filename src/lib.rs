@@ -1,5 +1,54 @@
+use clap::{Arg, Command, ArgAction};
 use tungstenite::{connect, Message};
 use url::Url;
+
+pub struct Item {
+    pub url: String,
+    pub input: String,
+    pub result: Result<Vec<String>, String>
+}
+
+impl Item {
+
+    // TODO: Create constructor method
+    // pub fn new(url: String, input: String) -> Self {
+    //     Item {
+    //         url: url,
+    //         input: input,
+    //         result: Result::Ok(vec![])
+    //     }
+    // }
+
+    pub async fn resolve(&mut self) {
+        log::info!("Connecting to websocket server -- {}", self.url);
+        self.result = run(&self.url, &self.input)
+    }
+}
+
+pub fn cli() -> Command {
+    Command::new("nostcat")
+        .about("A fictional versioning CLI")
+        .version("0.3.0")
+        .author("Blake Jakopovic")
+        .arg_required_else_help(true)
+        .arg(
+             Arg::new("unique")
+             .help("Sort and unique returned events")
+             .long("unique")
+             .short('u')
+             .required(false)
+             .num_args(0)
+             .action(ArgAction::SetTrue)
+        )
+        .arg(
+             Arg::new("servers")
+            .help("Websocket servers")
+            .num_args(0..)
+            .action(ArgAction::Append)
+            .required(true)
+            .trailing_var_arg(true)
+        )
+}
 
 pub fn run(url_str: &String, input: &String) -> Result<Vec<String>, String> {
 

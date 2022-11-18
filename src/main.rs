@@ -1,56 +1,9 @@
 extern crate log;
 
-use clap::{Arg, Command, ArgAction};
+use nostcat::{cli, Item};
 use std::io::{self};
 use std::process;
 
-struct Item {
-    url: String,
-    input: String,
-    result: Result<Vec<String>, String>
-}
-
-impl Item {
-
-    // TODO: Create constructor method
-    // pub fn new(url: String, input: String) -> Self {
-    //     Item {
-    //         url: url,
-    //         input: input,
-    //         result: Result::Ok(vec![])
-    //     }
-    // }
-
-    async fn resolve(&mut self) {
-        log::info!("Connecting to websocket server -- {}", self.url);
-        self.result = nostcat::run(&self.url, &self.input)
-    }
-}
-
-fn cli() -> Command {
-    Command::new("nostcat")
-        .about("A fictional versioning CLI")
-        .version("0.3.0")
-        .author("Blake Jakopovic")
-        .arg_required_else_help(true)
-        .arg(
-             Arg::new("unique")
-             .help("Sort and unique returned events")
-             .long("unique")
-             .short('u')
-             .required(false)
-             .num_args(0)
-             .action(ArgAction::SetTrue)
-        )
-        .arg(
-             Arg::new("servers")
-            .help("Websocket servers")
-            .num_args(0..)
-            .action(ArgAction::Append)
-            .required(true)
-            .trailing_var_arg(true)
-        )
-}
 
 #[tokio::main]
 async fn main() {
