@@ -31,11 +31,10 @@ async fn main() {
     // Create items for each websocket server
     let items: Vec<Item> = servers
         .into_iter()
-        .map(|url_str| Item {
-            url: url_str.to_owned(),
-            input: input.to_string(),
-            result: Ok(vec![])
-        }).collect();
+        .map(|url| Item::new(
+            url.to_string(),
+            input.to_string()))
+        .collect();
 
     // Create tasks for each item
     let tasks: Vec<_> = items
@@ -57,7 +56,7 @@ async fn main() {
     // Process task results
     let mut results = vec![];
     for item in items.iter() {
-        match &item.result {
+        match &item.result.as_ref().unwrap() {
             Ok(output) => {
                 results.extend(output);
             },
