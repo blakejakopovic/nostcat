@@ -1,33 +1,12 @@
 use clap::{Arg, Command, ArgAction};
+use std::sync::mpsc;
+use std::io::{self, BufRead};
 use tungstenite::{connect, Message};
 use url::Url;
 
-pub struct Item {
-    pub url: String,
-    pub input: String,
-    pub result: Option<Result<Vec<String>, String>>
-}
-
-impl Item {
-
-    // TODO: Create constructor method
-    pub fn new(url: String, input: String) -> Self {
-        Self {
-            url: url,
-            input: input,
-            result: None
-        }
-    }
-
-    pub async fn resolve(&mut self) {
-        log::info!("Connecting to websocket server -- {}", self.url);
-        self.result = Some(run(&self.url, &self.input))
-    }
-}
-
 pub fn cli() -> Command {
     Command::new("nostcat")
-        .about("A fictional versioning CLI")
+        .about("Websocket client for nostr relay scripting")
         .version("0.3.0")
         .author("Blake Jakopovic")
         .arg_required_else_help(true)
@@ -36,6 +15,15 @@ pub fn cli() -> Command {
              .help("Sort and unique returned events")
              .long("unique")
              .short('u')
+             .required(false)
+             .num_args(0)
+             .action(ArgAction::SetTrue)
+        )
+        .arg(
+             Arg::new("stream")
+             .help("Stream the websocket connection")
+             .long("stream")
+             .short('s')
              .required(false)
              .num_args(0)
              .action(ArgAction::SetTrue)
@@ -50,84 +38,52 @@ pub fn cli() -> Command {
         )
 }
 
-// fn _parse_url(_url_str: &String) -> Result<url::Url, String> {
-//   todo!()
-// }
+pub fn read_input() -> Vec<String> {
+    let mut lines: Vec<String> = Vec::new();
+    let stdin = io::stdin();
 
-// fn _connect2<T, G>(_url: Url) -> Result<(T, G), String> {
-//   todo!()
-// }
+    for line in stdin.lock().lines() {
+        lines.push(line.unwrap());
+    }
+    return lines
+}
 
-// fn _write_message(_message: String) -> Result<String, String> {
-//   todo!()
-// }
+pub fn run(tx: &mpsc::Sender<Result<String, String>>, url_str: String, input: Vec<String>, stream: bool) {
 
-// fn is_ESOE(data) -> bool {
-//   true
-// }
-
-// fn is_NOTICE(data) -> bool {
-//   true
-// }
-
-// fn is_OK(data) -> bool {
-//   true
-// }
-
-// fn handle_ESOE(socket: &TypeName) {
-//   &socket.write_message(Message::Close(None)).unwrap()
-// }
-
-// enum ServerCommand {
-//     EOSE(String),
-//     NOTICE(String),
-//     OK(String),
-//     EVENT(String),
-//     UNHANDLED(String)
-// }
-
-// impl ServerCommand {
-//   fn from_data(data: String) -> Self {
-//         match data {
-//             data if data.starts_with(&r#"["EOSE""#) => { ServerCommand::EOSE(data) }
-//             data if data.starts_with(&r#"["NOTICE""#) => { ServerCommand::NOTICE(data) }
-//             data if data.starts_with(&r#"["OK""#) => { ServerCommand::OK(data) }
-//             data if data.starts_with(&r#"["EVENT""#) => { ServerCommand::EVENT(data) }
-//             _ => ServerCommand::UNHANDLED(data)
-//         }
-//     }
-// }
-
-
-// fn _close_socket<T>(_socket: &T) {
-
-// }
-
-pub fn run(url_str: &String, input: &String) -> Result<Vec<String>, String> {
-
-    let url = match Url::parse(url_str) {
+    // Connect to websocket
+    let url = match Url::parse(&url_str) {
       Ok(url) => url,
-      Err(err) => return Err(format!("Unable to parse websocket url: {}", err))
+      Err(err) => {
+        tx.send(Err(format!("Unable to parse websocket url: {}", err))).unwrap();
+        return
+      }
     };
 
     // TODO: Need to add connection timeout, as currently it hangs for bad/failed connections
     // https://users.rust-lang.org/t/tls-websocket-how-to-make-tungstenite-works-with-mio-for-poll-and-secure-websocket-wss-via-native-tls-feature-of-tungstenite-crate/72533/4
-    let (mut socket, response) = match connect(url) {
+    let (mut socket, response) = match connect(url.clone()) {
         Ok((socket, response)) => (socket, response),
-        Err(err) => return Err(format!("Unable to connect to websocket server: {}", err))
+        Err(err) => {
+          tx.send(Err(format!("Unable to connect to websocket server: {}", err))).unwrap();
+          return
+        }
     };
 
     log::info!("Connected to websocket server -- {}", url_str);
     log::info!("Response HTTP code -- {}: {}", url_str, response.status());
 
-    match socket.write_message(Message::Text(input.to_owned())) {
-        Ok(_) => (),
-        Err(err) => return Err(format!("Failed to write to websocket: {}", err))
-    };
-
-    log::info!("Sent data -- {}: {}", url_str, input);
-
-    let mut result: Vec<String> = Vec::new();
+    // Send input (stdin)
+    for line in input {
+      match socket.write_message(Message::Text(line.to_owned())) {
+          Ok(_) => {
+            log::info!("Sent data -- {}: {}", url_str, line);
+          },
+          Err(err) => {
+            tx.send(Err(format!("Failed to write to websocket: {}", err))).unwrap();
+            return
+          }
+      };
+    }
 
     'run_loop: loop {
 
@@ -138,43 +94,58 @@ pub fn run(url_str: &String, input: &String) -> Result<Vec<String>, String> {
 
             Message::Text(data) => {
 
-              log::info!("Received data -- {}: {}", url_str, data);
+                log::info!("Received data -- {}: {}", url_str, data);
 
+                // TODO: Refactor out types / handlers
                 match data {
 
                     // Handle NIP-15: End of Stored Events Notice
                     data if data.starts_with(&r#"["EOSE""#) => {
-                        socket.write_message(Message::Close(None)).unwrap();
-                        // Skip pushing EOSE output to results
-                        break 'run_loop
+                        if !stream {
+                          socket.write_message(Message::Close(None)).unwrap();
+                          break 'run_loop;
+                        }
                     },
 
                     // Handle NIP-20: Command Results
+                    // TODO: when piping relay to relay, we don't want to use --stream
+                    //       but also don't want to close the websocket on OK
                     data if data.starts_with(&r#"["OK""#) => {
-                        socket.write_message(Message::Close(None)).unwrap();
-                        result.push(data);
-                        break 'run_loop
+
+                        tx.send(Ok(data)).unwrap();
+
+                        if !stream {
+                          socket.write_message(Message::Close(None)).unwrap();
+                          break 'run_loop;
+                        }
                     },
 
                     // Handle NIP-01: NOTICE
                     data if data.starts_with(&r#"["NOTICE""#) => {
-                        socket.write_message(Message::Close(None)).unwrap();
-                        result.push(data);
-                        break 'run_loop
+                        tx.send(Ok(data)).unwrap();
+
+                        if !stream {
+                          socket.write_message(Message::Close(None)).unwrap();
+                          break 'run_loop;
+                        }
                     },
 
                     // Handle all other text data
                     _ => {
-                        result.push(data)
+                        tx.send(Ok(data)).unwrap();
                     }
                 }
             },
 
+            Message::Ping(id) => {
+              log::info!("Replied with Pong -- {}", url_str);
+              socket.write_message(Message::Pong(id)).unwrap();
+            },
+
             _ => {
-                return Err(format!("Received non-text websocket data: {}", msg));
+                 tx.send(Err(format!("Received non-text websocket data: {:?}", msg))).unwrap();
+                 return
             }
         }
     }
-
-    return Ok(result)
 }

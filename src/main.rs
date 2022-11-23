@@ -1,12 +1,10 @@
 extern crate log;
 
-use nostcat::{cli, Item};
-use std::io::{self};
-use std::process;
+use nostcat::{cli, run, read_input};
+use std::sync::mpsc;
+use std::thread;
 
-
-#[tokio::main]
-async fn main() {
+fn main() {
 
     env_logger::init();
 
@@ -17,61 +15,51 @@ async fn main() {
         .map(|v| v.to_string())
         .collect::<Vec<_>>();
 
-    let mut input = String::new();
-    match io::stdin().read_line(&mut input) {
-        Ok(_) => (),
-        Err(err) => {
-          eprintln!("Unable to read from stdin: {}", err);
-          process::exit(1)
-        }
-    }
+    let stream = cli_matches.get_flag("stream");
 
-    input = input.trim().to_string();
+    let input = read_input();
 
-    // Create items for each websocket server
-    let items: Vec<Item> = servers
-        .into_iter()
-        .map(|url| Item::new(
-            url.to_string(),
-            input.to_string()))
-        .collect();
+    let (tx, rx) = mpsc::channel();
 
-    // Create tasks for each item
-    let tasks: Vec<_> = items
-        .into_iter()
-        .map(|mut item| {
-            tokio::spawn(async {
-                item.resolve().await;
-                item
-            })
-        })
-        .collect();
+    let mut v = Vec::<std::thread::JoinHandle<()>>::new();
+    for server in servers {
+      let tx = tx.clone();
+      let input = input.clone();
 
-    // Await for all tasks to complete
-    let mut items = vec![];
-    for task in tasks {
-        items.push(task.await.unwrap());
-    }
+      log::info!("Spawning thread for -- {}", server);
 
-    // Process task results
-    let mut results = vec![];
-    for item in items.iter() {
-        match &item.result.as_ref().unwrap() {
-            Ok(output) => {
-                results.extend(output);
-            },
-            Err(error) => {
-                eprintln!("Error processing results websocket server: {} {}", item.url, error)
+      let jh = thread::spawn( move || {
+        run(&tx, server, input, stream)
+      });
+
+      v.push(jh);
+    };
+
+    // drop the original tx, as it was never used
+    drop(tx);
+
+    let mut seen: Vec<String> = vec![];
+    for line in rx {
+
+        match line {
+            Err(e) => { eprintln!("{}", e) },
+            Ok(line) => {
+
+              if cli_matches.get_flag("unique") {
+
+                  if seen.contains(&line) {
+                      continue;
+                  }
+
+                  seen.push(line.clone());
+              }
+
+              println!("{}", line);
             }
         };
     }
 
-    if cli_matches.get_flag("unique") {
-        results.sort();
-        results.dedup();
-    }
-
-    for result in results {
-        println!("{}", result);
+    for jh in v {
+        jh.join().unwrap();
     }
 }
