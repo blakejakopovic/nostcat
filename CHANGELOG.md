@@ -3,7 +3,7 @@
 ## v0.3.1
 * Added --stream flag
 * Added multi-line stdin support
-* Added support for piping server to server? NEED TO TEST
+* Added support for piping server to server
 * Added websocket PONG response
 * Updated app description
 * Migrate from async to threads
