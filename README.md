@@ -31,7 +31,7 @@ $ echo '["REQ", "RAND", {"kinds": [1], "limit": 8}]' |
   nostcat wss://relay.damus.io |
   jq '.[2]'
 
-  $ echo '["REQ", "RAND", {"kinds": [1], "limit": 8}]' |
+$ echo '["REQ", "RAND", {"kinds": [1], "limit": 8}]' |
   nostcat wss://relay.damus.io |
   jq '.[2].content'
 ```
