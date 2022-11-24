@@ -6,6 +6,35 @@ use tungstenite::stream::MaybeTlsStream;
 use tungstenite::{connect, Message};
 use url::Url;
 
+#[derive(Debug)]
+enum Response {
+    Event(String),
+    Notice(String),
+    Ok(String),
+    EOSE(String),
+    Unsupported(String)
+}
+
+impl Response {
+    fn from_string(string: String) -> Self {
+        if string.starts_with("[\"EVENT\"") {
+          Response::Event(string)
+        }
+        else if string.starts_with("[\"NOTICE\"") {
+          Response::Notice(string.to_string())
+        }
+        else if string.starts_with("[\"OK\"") {
+          Response::Ok(string.to_string())
+        }
+        else if string.starts_with("[\"EOSE\"") {
+          Response::EOSE(string.to_string())
+        }
+        else {
+          Response::Unsupported(string.to_string())
+        }
+    }
+}
+
 pub fn cli() -> Command {
     Command::new("nostcat")
         .about("Websocket client for nostr relay scripting")
@@ -138,10 +167,10 @@ pub fn run(
             Message::Text(data) => {
                 log::info!("Received data -- {}: {}", url_str, data);
 
-                // TODO: Refactor out types / handlers
-                match data {
+                match Response::from_string(data.clone()) {
+
                     // Handle NIP-15: End of Stored Events Notice
-                    data if data.starts_with(&r#"["EOSE""#) => {
+                    Response::EOSE(_) => {
                         if !stream {
                             socket.write_message(Message::Close(None)).unwrap();
                             break 'run_loop;
@@ -151,7 +180,8 @@ pub fn run(
                     // Handle NIP-20: Command Results
                     // TODO: when piping relay to relay, we don't want to use --stream
                     //       but also don't want to close the websocket on OK
-                    data if data.starts_with(&r#"["OK""#) => {
+                    Response::Ok(data) => {
+
                         tx.send(Ok(data)).unwrap();
 
                         if !stream {
@@ -161,7 +191,7 @@ pub fn run(
                     }
 
                     // Handle NIP-01: NOTICE
-                    data if data.starts_with(&r#"["NOTICE""#) => {
+                    Response::Notice(data) => {
                         tx.send(Ok(data)).unwrap();
 
                         if !stream {
@@ -170,9 +200,13 @@ pub fn run(
                         }
                     }
 
-                    // Handle all other text data
-                    _ => {
+                    Response::Event(data) => {
                         tx.send(Ok(data)).unwrap();
+                    },
+
+                    // Handle unsupported nostr data
+                    Response::Unsupported(data) => {
+                        tx.send(Err(format!("Received unsupported nostr data: {:?}", data))).unwrap();
                     }
                 }
             }
