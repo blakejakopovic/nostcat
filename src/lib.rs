@@ -80,8 +80,25 @@ pub fn run(
         }
     };
 
+    if !stream {
+        let timeout_ms = 1000;
+        let timeout = Duration::from_millis(timeout_ms);
+
+        let timeout_res = match socket.get_mut() {
+            MaybeTlsStream::NativeTls(ref mut s) => s.get_mut().set_read_timeout(Some(timeout)),
+            MaybeTlsStream::Plain(ref s) => s.set_read_timeout(Some(timeout)),
+
+            t => {
+                log::warn!("{:?} not handled, not setting read timeout", t);
+                Ok(())
+            }
+        };
+
+        match timeout_res {
+            Err(err) => log::error!("error setting timeout: {}", err),
+            Ok(_) => log::info!("Setting timeout to {} ms", timeout_ms),
         }
-    };
+    }
 
     log::info!("Connected to websocket server -- {}", url_str);
     log::info!("Response HTTP code -- {}: {}", url_str, response.status());
@@ -102,10 +119,22 @@ pub fn run(
 
     'run_loop: loop {
         // TODO: Review better error handing for this
-        let msg = socket.read_message().unwrap();
+        let msg = socket.read_message();
+
+        if let Err(err) = msg.as_ref() {
+            let errmsg = format!("read error: {}", err);
+            if errmsg.contains("Resource temporarily unavailable") {
+                let timeout_msg = format!("{} timed out when waiting for a response", url_str);
+                tx.send(Err(timeout_msg)).unwrap();
+                return;
+            }
+            tx.send(Err(errmsg)).unwrap();
+            break;
+        }
+
+        let msg = msg.unwrap();
 
         match msg {
-
             Message::Text(data) => {
                 log::info!("Received data -- {}: {}", url_str, data);
 
