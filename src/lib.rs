@@ -16,21 +16,13 @@ enum Response {
 }
 
 impl Response {
-    fn from_string(string: String) -> Self {
-        if string.starts_with("[\"EVENT\"") {
-          Response::Event(string)
-        }
-        else if string.starts_with("[\"NOTICE\"") {
-          Response::Notice(string.to_string())
-        }
-        else if string.starts_with("[\"OK\"") {
-          Response::Ok(string.to_string())
-        }
-        else if string.starts_with("[\"EOSE\"") {
-          Response::EOSE(string.to_string())
-        }
-        else {
-          Response::Unsupported(string.to_string())
+    fn from_string(s: String) -> Self {
+        match s {
+            s if s.starts_with("[\"EVENT\"") => Response::Event(s),
+            s if s.starts_with("[\"NOTICE\"") => Response::Notice(s),
+            s if s.starts_with("[\"OK\"") => Response::Ok(s),
+            s if s.starts_with("[\"EOSE\"") => Response::EOSE(s),
+            _ => Response::Unsupported(s)
         }
     }
 }
