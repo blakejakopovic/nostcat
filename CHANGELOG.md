@@ -5,9 +5,11 @@
 * Added multi-line stdin support
 * Added support for piping server to server
 * Added websocket PONG response
+* Added default one second connection timeout
 * Updated app description
 * Migrate from async to threads
-* Refactored main.rs
+* Refactored main.rs + lib.rs
+* Added rustfmt
 * Fixed README.md example typo
 * Removed tokio dependancy
 
