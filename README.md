@@ -42,6 +42,13 @@ $ echo '["REQ", "RAND", {"kinds": [1], "limit": 8}]' |
   nostcat --unique wss://relay.damus.io wss://nostr.ono.re
 ```
 
+With a websocket connection timeout in milliseconds
+```shell
+$ echo '["REQ", "RAND", {"kinds": [1], "limit": 2}]' |
+  nostcat --connect-timeout 250 wss://relay.damus.io
+```
+
+
 Stream websocket data (like tail -f)
 ```shell
 $ echo '["REQ", "RAND", {"kinds": [1], "limit": 8}]' |

@@ -16,8 +16,6 @@ fn main() {
         .map(|v| v.to_string())
         .collect::<Vec<_>>();
 
-    let stream = cli_matches.get_flag("stream");
-
     let input = read_input();
 
     let (tx, rx) = mpsc::channel();
@@ -26,10 +24,11 @@ fn main() {
     for server in servers {
         let tx = tx.clone();
         let input = input.clone();
+        let cli_matches = cli_matches.clone();
 
         log::info!("Spawning thread for -- {}", server);
 
-        let jh = thread::spawn(move || run(&tx, server, input, stream));
+        let jh = thread::spawn(move || run(&tx, server, input, cli_matches));
 
         v.push(jh);
     }

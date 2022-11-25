@@ -1,4 +1,4 @@
-use clap::{Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::io::{self, BufRead};
 use std::sync::mpsc;
 use std::time::Duration;
@@ -12,7 +12,7 @@ enum Response {
     Notice(String),
     Ok(String),
     EOSE(String),
-    Unsupported(String)
+    Unsupported(String),
 }
 
 impl Response {
@@ -22,7 +22,7 @@ impl Response {
             s if s.starts_with("[\"NOTICE\"") => Response::Notice(s),
             s if s.starts_with("[\"OK\"") => Response::Ok(s),
             s if s.starts_with("[\"EOSE\"") => Response::EOSE(s),
-            _ => Response::Unsupported(s)
+            _ => Response::Unsupported(s),
         }
     }
 }
@@ -52,6 +52,15 @@ pub fn cli() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .arg(
+            Arg::new("connect-timeout")
+                .help("Websocket connection timeout in milliseconds (non-streaming)")
+                .long("connect-timeout")
+                .required(false)
+                .num_args(1)
+                .value_parser(clap::value_parser!(u64))
+                .default_value("1"),
+        )
+        .arg(
             Arg::new("servers")
                 .help("Websocket servers")
                 .num_args(0..)
@@ -75,9 +84,12 @@ pub fn run(
     tx: &mpsc::Sender<Result<String, String>>,
     url_str: String,
     input: Vec<String>,
-    stream: bool,
+    args: ArgMatches,
 ) {
-    // Connect to websocket
+
+    // Safe to unwrap as default arg value
+    let connect_timeout = args.get_one("connect-timeout").unwrap();
+
     let url = match Url::parse(&url_str) {
         Ok(url) => url,
         Err(err) => {
@@ -87,27 +99,25 @@ pub fn run(
         }
     };
 
-    // TODO: Need to add connection timeout, as currently it hangs for bad/failed connections
-    // https://users.rust-lang.org/t/tls-websocket-how-to-make-tungstenite-works-with-mio-for-poll-and-secure-websocket-wss-via-native-tls-feature-of-tungstenite-crate/72533/4
     let (mut socket, response) = match connect(url.clone()) {
         Ok((socket, response)) => (socket, response),
         Err(err) => {
-            tx.send(Err(format!(
-                "Unable to connect to websocket server: {}",
-                err
-            )))
-            .unwrap();
+            tx.send(Err(
+                format!("Unable to connect to websocket server: {}", err),
+            )).unwrap();
             return;
         }
     };
 
+    let stream = args.get_flag("stream");
     if !stream {
-        let timeout_ms = 1000;
-        let timeout = Duration::from_millis(timeout_ms);
+        let timeout_duration = Duration::from_millis(*connect_timeout);
 
         let timeout_res = match socket.get_mut() {
-            MaybeTlsStream::NativeTls(ref mut s) => s.get_mut().set_read_timeout(Some(timeout)),
-            MaybeTlsStream::Plain(ref s) => s.set_read_timeout(Some(timeout)),
+            MaybeTlsStream::NativeTls(ref mut s) => {
+                s.get_mut().set_read_timeout(Some(timeout_duration))
+            }
+            MaybeTlsStream::Plain(ref s) => s.set_read_timeout(Some(timeout_duration)),
 
             t => {
                 log::warn!("{:?} not handled, not setting read timeout", t);
@@ -116,15 +126,14 @@ pub fn run(
         };
 
         match timeout_res {
-            Err(err) => log::error!("error setting timeout: {}", err),
-            Ok(_) => log::info!("Setting timeout to {} ms", timeout_ms),
+            Err(err) => log::error!("Error setting timeout: {}", err),
+            Ok(_) => log::info!("Setting timeout to {} ms", connect_timeout),
         }
     }
 
     log::info!("Connected to websocket server -- {}", url_str);
     log::info!("Response HTTP code -- {}: {}", url_str, response.status());
 
-    // Send input (stdin)
     for line in input {
         match socket.write_message(Message::Text(line.to_owned())) {
             Ok(_) => {
@@ -139,16 +148,24 @@ pub fn run(
     }
 
     'run_loop: loop {
-        // TODO: Review better error handing for this
+
         let msg = socket.read_message();
 
         if let Err(err) = msg.as_ref() {
-            let errmsg = format!("read error: {}", err);
+            let errmsg = format!("Websocket read message error: {}", err);
+
+            // Connection timeout detected
             if errmsg.contains("Resource temporarily unavailable") {
-                let timeout_msg = format!("{} timed out when waiting for a response", url_str);
+                let timeout_msg = format!(
+                    "Connection timed out after {}ms while waiting for a response -- {}",
+                    connect_timeout,
+                    url_str
+                );
+                log::info!("{}", timeout_msg);
                 tx.send(Err(timeout_msg)).unwrap();
                 return;
             }
+
             tx.send(Err(errmsg)).unwrap();
             break;
         }
@@ -194,11 +211,12 @@ pub fn run(
 
                     Response::Event(data) => {
                         tx.send(Ok(data)).unwrap();
-                    },
+                    }
 
                     // Handle unsupported nostr data
                     Response::Unsupported(data) => {
-                        tx.send(Err(format!("Received unsupported nostr data: {:?}", data))).unwrap();
+                        tx.send(Err(format!("Received unsupported nostr data: {:?}", data)))
+                            .unwrap();
                     }
                 }
             }
