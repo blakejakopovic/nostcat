@@ -58,7 +58,7 @@ pub fn cli() -> Command {
                 .required(false)
                 .num_args(1)
                 .value_parser(clap::value_parser!(u64))
-                .default_value("1"),
+                .default_value("10"),
         )
         .arg(
             Arg::new("servers")
