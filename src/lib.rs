@@ -80,8 +80,8 @@ pub fn read_input() -> Vec<String> {
     return lines;
 }
 
-pub fn run(
-    tx: &mpsc::UnboundedSender<Result<String, String>>, // Sender
+pub async fn run(
+    tx: mpsc::Sender<Result<String, String>>,
     url_str: String,
     input: Vec<String>,
     args: ArgMatches,
@@ -94,7 +94,7 @@ pub fn run(
         Ok(url) => url,
         Err(err) => {
             tx.send(Err(format!("Unable to parse websocket url: {}", err)))
-                .unwrap();
+                .await.unwrap();
             return;
         }
     };
@@ -104,7 +104,7 @@ pub fn run(
         Err(err) => {
             tx.send(Err(
                 format!("Unable to connect to websocket server: {}", err),
-            )).unwrap();
+            )).await.unwrap();
             return;
         }
     };
@@ -141,7 +141,7 @@ pub fn run(
             }
             Err(err) => {
                 tx.send(Err(format!("Failed to write to websocket: {}", err)))
-                    .unwrap();
+                    .await.unwrap();
                 return;
             }
         };
@@ -162,11 +162,11 @@ pub fn run(
                     url_str
                 );
                 log::info!("{}", timeout_msg);
-                tx.send(Err(timeout_msg)).unwrap();
+                tx.send(Err(timeout_msg)).await.unwrap();
                 return;
             }
 
-            tx.send(Err(errmsg)).unwrap();
+            tx.send(Err(errmsg)).await.unwrap();
             break;
         }
 
@@ -191,7 +191,7 @@ pub fn run(
                     //       but also don't want to close the websocket on OK
                     Response::Ok(data) => {
 
-                        tx.send(Ok(data)).unwrap();
+                        tx.send(Ok(data)).await.unwrap();
 
                         if !stream {
                             socket.write_message(Message::Close(None)).unwrap();
@@ -201,7 +201,7 @@ pub fn run(
 
                     // Handle NIP-01: NOTICE
                     Response::Notice(data) => {
-                        tx.send(Ok(data)).unwrap();
+                        tx.send(Ok(data)).await.unwrap();
 
                         if !stream {
                             socket.write_message(Message::Close(None)).unwrap();
@@ -210,13 +210,13 @@ pub fn run(
                     }
 
                     Response::Event(data) => {
-                        tx.send(Ok(data)).unwrap();
+                        tx.send(Ok(data)).await.unwrap();
                     }
 
                     // Handle unsupported nostr data
                     Response::Unsupported(data) => {
                         tx.send(Err(format!("Received unsupported nostr data: {:?}", data)))
-                            .unwrap();
+                            .await.unwrap();
                     }
                 }
             }
@@ -228,7 +228,7 @@ pub fn run(
 
             _ => {
                 tx.send(Err(format!("Received non-text websocket data: {:?}", msg)))
-                    .unwrap();
+                    .await.unwrap();
                 return;
             }
         }

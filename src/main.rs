@@ -18,16 +18,18 @@ async fn main() {
 
     let input = read_input();
 
-    let (tx, mut rx) = mpsc::unbounded_channel(); // channel(100)
+    let (tx, mut rx) = mpsc::channel(100);
 
     for server in servers {
-        let tx = tx.clone();
+        let tx2 = tx.clone();
         let input = input.clone();
         let cli_matches = cli_matches.clone();
 
         log::info!("Spawning thread for -- {}", server);
 
-        tokio::spawn(async move { run(&tx, server, input, cli_matches)});
+        tokio::spawn(async move {
+            run(tx2, server, input, cli_matches).await
+        });
     }
 
     // drop the original tx, as it was never used
@@ -41,28 +43,28 @@ async fn main() {
         let receive = rx.recv().await;
 
         match receive {
-          None => {
-              log::info!("All websockets channels now closed");
-              break 'recv_loop;
-          },
-          Some(line) => {
-            match line {
-                Err(e) => eprintln!("{}", e),
-                Ok(line) => {
+            None => {
+                log::info!("All websockets channels now closed");
+                break 'recv_loop;
+            },
+            Some(line) => {
+                match line {
+                    Err(e) => eprintln!("{}", e),
+                    Ok(line) => {
 
-                    if cli_matches.get_flag("unique") {
+                        if cli_matches.get_flag("unique") {
 
-                        if seen.contains(&line) {
-                            continue;
+                            if seen.contains(&line) {
+                                continue;
+                            }
+
+                            seen.push(line.clone());
                         }
 
-                        seen.push(line.clone());
+                        println!("{}", line);
                     }
-
-                    println!("{}", line);
-                }
-            };
-          }
+                };
+            }
         }
     }
 }
