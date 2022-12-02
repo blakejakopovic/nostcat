@@ -23,5 +23,5 @@
 * Added RUST_LOG info messages
 * Refactored main.rs
 
-v0.1.0 - Initial release
+## v0.1.0 - Initial release
 * Simple websocket write and receive
