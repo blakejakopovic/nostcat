@@ -1,12 +1,12 @@
 # Changelog
 
-## v0.3.1-Beta
+## v0.3.1
 * Added --stream flag
 * Added --connect-timeout option
 * Added multi-line stdin support
 * Added support for piping server to server
 * Added websocket PONG response
-* Added default one second connection timeout (non-streaming)
+* Added default one second connection timeout (non-streaming) (Thanks @jb55)
 * Updated app description
 * Migrate from async to threads
 * Refactored main.rs + lib.rs
