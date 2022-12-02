@@ -1,6 +1,6 @@
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::io::{self, BufRead};
-use std::sync::mpsc;
+use tokio::sync::mpsc;
 use std::time::Duration;
 use tungstenite::stream::MaybeTlsStream;
 use tungstenite::{connect, Message};
@@ -81,7 +81,7 @@ pub fn read_input() -> Vec<String> {
 }
 
 pub fn run(
-    tx: &mpsc::Sender<Result<String, String>>,
+    tx: &mpsc::UnboundedSender<Result<String, String>>, // Sender
     url_str: String,
     input: Vec<String>,
     args: ArgMatches,
