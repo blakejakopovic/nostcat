@@ -47,23 +47,21 @@ async fn main() {
                 log::info!("All websockets channels now closed");
                 break 'recv_loop;
             },
-            Some(line) => {
-                match line {
-                    Err(e) => eprintln!("{}", e),
-                    Ok(line) => {
 
-                        if cli_matches.get_flag("unique") {
+            Some(Err(err)) => { eprintln!("{}", err) },
 
-                            if seen.contains(&line) {
-                                continue;
-                            }
+            Some(Ok(line)) => {
 
-                            seen.push(line.clone());
-                        }
+                if cli_matches.get_flag("unique") {
 
-                        println!("{}", line);
+                    if seen.contains(&line) {
+                        continue;
                     }
-                };
+
+                    seen.push(line.clone());
+                }
+
+                println!("{}", line);
             }
         }
     }
