@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.3.2
+* Switched from threads back to async
+* Increased --connect-timeout default to 10 seconds
+* General code improvements
+
 ## v0.3.1
 * Added --stream flag
 * Added --connect-timeout option

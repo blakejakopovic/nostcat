@@ -30,7 +30,7 @@ impl Response {
 pub fn cli() -> Command {
     Command::new("nostcat")
         .about("Websocket client for nostr relay scripting")
-        .version("0.3.1")
+        .version("0.3.2")
         .author("Blake Jakopovic")
         .arg_required_else_help(true)
         .arg(
