@@ -4,7 +4,7 @@ use nostcat::{cli, run, read_input};
 use tokio::sync::mpsc;
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     env_logger::init();
 
@@ -28,7 +28,7 @@ async fn main() {
         log::info!("Spawning thread for -- {}", server);
 
         tokio::spawn(async move {
-            run(tx2, server, input, cli_matches).await
+            run(tx2, &server, input, cli_matches).await
         });
     }
 
@@ -65,4 +65,6 @@ async fn main() {
             }
         }
     }
+
+    Ok(())
 }

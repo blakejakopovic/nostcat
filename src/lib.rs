@@ -18,10 +18,10 @@ enum Response {
 impl Response {
     fn from_string(s: String) -> Self {
         match s {
-            s if s.starts_with("[\"EVENT\"") => Response::Event(s),
-            s if s.starts_with("[\"NOTICE\"") => Response::Notice(s),
-            s if s.starts_with("[\"OK\"") => Response::Ok(s),
-            s if s.starts_with("[\"EOSE\"") => Response::EOSE(s),
+            s if s.starts_with(r#"["EVENT""#) => Response::Event(s),
+            s if s.starts_with(r#"["NOTICE""#) => Response::Notice(s),
+            s if s.starts_with(r#"["OK""#) => Response::Ok(s),
+            s if s.starts_with(r#"["EOSE""#) => Response::EOSE(s),
             _ => Response::Unsupported(s),
         }
     }
@@ -82,7 +82,7 @@ pub fn read_input() -> Vec<String> {
 
 pub async fn run(
     tx: mpsc::Sender<Result<String, String>>,
-    url_str: String,
+    url_str: &str,
     input: Vec<String>,
     args: ArgMatches,
 ) {
