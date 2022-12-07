@@ -1,7 +1,7 @@
 # nostcat
 [![Crates.io](https://img.shields.io/crates/v/nostcat)](https://crates.io/crates/nostcat)
 [![Crates.io](https://img.shields.io/crates/d/nostcat)](https://crates.io/crates/nostcat)
-[![Crates.io](https://img.shields.io/crates/l/nostcat)](https://github.com/blakejakopovic/nostcat/blob/master/LICENSE.txt)
+[![Crates.io](https://img.shields.io/crates/l/nostcat)](https://github.com/blakejakopovic/nostcat/blob/master/LICENSE)
 
 Websocket client for nostr relay scripting
 

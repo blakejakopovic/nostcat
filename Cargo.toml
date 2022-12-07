@@ -4,7 +4,7 @@ description = "Websocket client for nostr relay scripting"
 version = "0.3.2"
 edition = "2021"
 repository = "https://github.com/blakejakopovic/nostcat"
-license-file = "LICENSE.txt"
+license-file = "LICENSE"
 readme = "README.md"
 keywords = ["nostr", "nostr-protocol", "websocket", "cli"]
 
