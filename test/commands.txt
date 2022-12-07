@@ -1,2 +1,0 @@
-["REQ", "RAND", {"kinds": [1], "limit": 2}]
-["REQ", "RAND2", {"kinds": [2], "limit": 1}]
