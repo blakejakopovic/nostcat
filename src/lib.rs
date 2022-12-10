@@ -30,7 +30,7 @@ impl Response {
 pub fn cli() -> Command {
     Command::new("nostcat")
         .about("Websocket client for nostr relay scripting")
-        .version("0.3.2")
+        .version("0.3.3")
         .author("Blake Jakopovic")
         .arg_required_else_help(true)
         .arg(
@@ -58,7 +58,7 @@ pub fn cli() -> Command {
                 .required(false)
                 .num_args(1)
                 .value_parser(clap::value_parser!(u64))
-                .default_value("10"),
+                .default_value("10000"),
         )
         .arg(
             Arg::new("servers")

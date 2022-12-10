@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.3.3
+* Fixed --connect-timeout default to 10 seconds (not ms)
+
 ## v0.3.2
 * Switched from threads back to async
 * Increased --connect-timeout default to 10 seconds
