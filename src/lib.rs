@@ -1,13 +1,36 @@
-use clap::{Arg, ArgAction, ArgMatches, Command};
+#[macro_use]
+extern crate log;
+
+use clap::{Arg, ArgAction, Command};
 use std::io::{self, BufRead};
 use tokio::sync::mpsc;
 use std::time::Duration;
 use tungstenite::stream::MaybeTlsStream;
 use tungstenite::{connect, Message};
 use url::Url;
+use serde::{Deserialize, Serialize};
+
+#[derive(Clone)]
+pub struct Config {
+  pub connect_timeout: u64,
+  pub stream: bool,
+  pub omit_eose: bool
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct ServerResponse {
+  pub source_server: String,
+  pub response: String,
+}
+
+impl ServerResponse {
+  fn to_string(self: Self) -> String {
+    serde_json::to_string(&self).unwrap()
+  }
+}
 
 #[derive(Debug)]
-enum Response {
+pub enum Response {
     Event(String),
     Notice(String),
     Ok(String),
@@ -16,7 +39,7 @@ enum Response {
 }
 
 impl Response {
-    fn from_string(s: String) -> Self {
+    pub fn from_string(s: String) -> Self {
         match s {
             s if s.starts_with(r#"["EVENT""#) => Response::Event(s),
             s if s.starts_with(r#"["NOTICE""#) => Response::Notice(s),
@@ -30,7 +53,7 @@ impl Response {
 pub fn cli() -> Command {
     Command::new("nostcat")
         .about("Websocket client for nostr relay scripting")
-        .version("0.3.3")
+        .version(option_env!("CARGO_PKG_VERSION").unwrap_or(""))
         .author("Blake Jakopovic")
         .arg_required_else_help(true)
         .arg(
@@ -80,15 +103,12 @@ pub fn read_input() -> Vec<String> {
     return lines;
 }
 
-pub async fn run(
+pub async fn request (
     tx: mpsc::Sender<Result<String, String>>,
     url_str: &str,
     input: Vec<String>,
-    args: ArgMatches,
+    config: Config,
 ) {
-
-    // Safe to unwrap as default arg value
-    let connect_timeout = args.get_one("connect-timeout").unwrap();
 
     let url = match Url::parse(&url_str) {
         Ok(url) => url,
@@ -109,9 +129,9 @@ pub async fn run(
         }
     };
 
-    let stream = args.get_flag("stream");
+    let stream = config.stream;
     if !stream {
-        let timeout_duration = Duration::from_millis(*connect_timeout);
+        let timeout_duration = Duration::from_millis(config.connect_timeout);
 
         let timeout_res = match socket.get_mut() {
             MaybeTlsStream::NativeTls(ref mut s) => {
@@ -120,24 +140,24 @@ pub async fn run(
             MaybeTlsStream::Plain(ref s) => s.set_read_timeout(Some(timeout_duration)),
 
             t => {
-                log::warn!("{:?} not handled, not setting read timeout", t);
+                warn!("{:?} not handled, not setting read timeout", t);
                 Ok(())
             }
         };
 
         match timeout_res {
-            Err(err) => log::error!("Error setting timeout: {}", err),
-            Ok(_) => log::info!("Setting timeout to {} ms", connect_timeout),
+            Err(err) => error!("Error setting timeout: {}", err),
+            Ok(_) => info!("Setting timeout to {} ms", config.connect_timeout),
         }
     }
 
-    log::info!("Connected to websocket server -- {}", url_str);
-    log::info!("Response HTTP code -- {}: {}", url_str, response.status());
+    info!("Connected to websocket server -- {}", url_str);
+    info!("Response HTTP code -- {}: {}", url_str, response.status());
 
     for line in input {
         match socket.write_message(Message::Text(line.to_owned())) {
             Ok(_) => {
-                log::info!("Sent data -- {}: {}", url_str, line);
+                info!("Sent data -- {}: {}", url_str, line);
             }
             Err(err) => {
                 tx.send(Err(format!("Failed to write to websocket: {}", err)))
@@ -158,10 +178,10 @@ pub async fn run(
             if errmsg.contains("Resource temporarily unavailable") {
                 let timeout_msg = format!(
                     "Connection timed out after {}ms while waiting for a response -- {}",
-                    connect_timeout,
+                    config.connect_timeout,
                     url_str
                 );
-                log::info!("{}", timeout_msg);
+                info!("{}", timeout_msg);
                 tx.send(Err(timeout_msg)).await.unwrap();
                 return;
             }
@@ -174,14 +194,24 @@ pub async fn run(
 
         match msg {
             Message::Text(data) => {
-                log::info!("Received data -- {}: {}", url_str, data);
+                info!("Received data -- {}: {}", url_str, data);
 
                 match Response::from_string(data.clone()) {
 
                     // Handle NIP-15: End of Stored Events Notice
-                    Response::EOSE(_) => {
+                    Response::EOSE(data) => {
+
+                        if !config.omit_eose {
+                          let server_response = ServerResponse {
+                              source_server: url_str.to_string(),
+                              response: data.clone(),
+                          };
+                          tx.send(Ok(server_response.to_string())).await.unwrap();
+                        }
+
                         if !stream {
-                            socket.write_message(Message::Close(None)).unwrap();
+                          info!("Closing websocket -- {}: {}", data, url_str);
+                            socket.close(None).unwrap();
                             break 'run_loop;
                         }
                     }
@@ -191,26 +221,40 @@ pub async fn run(
                     //       but also don't want to close the websocket on OK
                     Response::Ok(data) => {
 
-                        tx.send(Ok(data)).await.unwrap();
+                        let server_response = ServerResponse {
+                            source_server: url_str.to_string(),
+                            response: data.clone(),
+                        };
+                        tx.send(Ok(server_response.to_string())).await.unwrap();
 
                         if !stream {
-                            socket.write_message(Message::Close(None)).unwrap();
+                            info!("Closing websocket -- {}: {}", data, url_str);
+                            socket.close(None).unwrap();
                             break 'run_loop;
                         }
                     }
 
                     // Handle NIP-01: NOTICE
                     Response::Notice(data) => {
-                        tx.send(Ok(data)).await.unwrap();
+                        let server_response = ServerResponse {
+                            source_server: url_str.to_string(),
+                            response: data.clone(),
+                        };
+                        tx.send(Ok(server_response.to_string())).await.unwrap();
 
                         if !stream {
-                            socket.write_message(Message::Close(None)).unwrap();
+                            info!("Closing websocket -- {}: {}", data, url_str);
+                            socket.close(None).unwrap();
                             break 'run_loop;
                         }
                     }
 
                     Response::Event(data) => {
-                        tx.send(Ok(data)).await.unwrap();
+                        let server_response = ServerResponse {
+                            source_server: url_str.to_string(),
+                            response: data,
+                        };
+                        tx.send(Ok(server_response.to_string())).await.unwrap();
                     }
 
                     // Handle unsupported nostr data
@@ -222,7 +266,7 @@ pub async fn run(
             }
 
             Message::Ping(id) => {
-                log::info!("Replied with Pong -- {}", url_str);
+                info!("Replied with Pong -- {}", url_str);
                 socket.write_message(Message::Pong(id)).unwrap();
             }
 

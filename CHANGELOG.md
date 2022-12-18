@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.3.4
+* Added nostcat support for library use
+* Added support to omit_eose output (enabled by default)
+* General refactoring and code improvements
+
 ## v0.3.3
 * Fixed --connect-timeout default to 10 seconds (not ms)
 

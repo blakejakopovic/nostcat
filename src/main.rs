@@ -1,6 +1,8 @@
+#[macro_use]
 extern crate log;
 
-use nostcat::{cli, run, read_input};
+use nostcat::{Config, ServerResponse};
+use nostcat::{cli, request, read_input};
 use tokio::sync::mpsc;
 
 #[tokio::main]
@@ -20,15 +22,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let (tx, mut rx) = mpsc::channel(100);
 
+    let config: Config = Config{
+      connect_timeout: *cli_matches.get_one("connect-timeout").unwrap(),
+      stream: cli_matches.get_flag("stream"),
+      omit_eose: true,
+    };
+
     for server in servers {
         let tx2 = tx.clone();
         let input = input.clone();
-        let cli_matches = cli_matches.clone();
+        let config = config.clone();
 
-        log::info!("Spawning thread for -- {}", server);
+        info!("Spawning async for -- {}", server);
 
         tokio::spawn(async move {
-            run(tx2, &server, input, cli_matches).await
+            request(tx2, &server, input, config).await
         });
     }
 
@@ -44,24 +52,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         match receive {
             None => {
-                log::info!("All websockets channels now closed");
+                info!("All websockets channels now closed");
                 break 'recv_loop;
             },
 
             Some(Err(err)) => { eprintln!("{}", err) },
 
-            Some(Ok(line)) => {
+            Some(Ok(message)) => {
+
+                let server_response: ServerResponse = serde_json::from_str(&message).unwrap();
+                let response = server_response.response;
 
                 if cli_matches.get_flag("unique") {
 
-                    if seen.contains(&line) {
+                    if seen.contains(&response) {
                         continue;
                     }
 
-                    seen.push(line.clone());
+                    seen.push(response.clone());
                 }
 
-                println!("{}", line);
+                println!("{}", response);
             }
         }
     }
