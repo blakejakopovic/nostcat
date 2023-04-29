@@ -1,8 +1,8 @@
-FROM rust:alpine
+FROM rust:slim-bullseye
 
-RUN apk update && \
-    apk upgrade && \
-    apk add --no-cache pkgconfig openssl-dev musl-dev
+RUN apt-get update && \
+    apt-get upgrade -y && \
+    apt-get install -y musl-dev pkg-config libssl-dev
 
 WORKDIR /usr/src/myapp
 COPY . .
