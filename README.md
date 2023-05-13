@@ -3,7 +3,7 @@
 [![Crates.io](https://img.shields.io/crates/d/nostcat)](https://crates.io/crates/nostcat)
 [![Crates.io](https://img.shields.io/crates/l/nostcat)](https://github.com/blakejakopovic/nostcat/blob/master/LICENSE)
 
-Websocket client for nostr relay scripting
+Websocket client command line tool for nostr relay scripting, with docker and tor support
 
 
 ## Examples
@@ -66,7 +66,7 @@ $ echo '["REQ", "RAND", {"kinds": [1], "limit": 8}]' |
 
 Pipe events from one server to another (currently limited to 1 event at a time)
 ```shell
-$ echo '["REQ", "CID", {"limit": 1}]' |
+$ echo '["REQ", "RAND", {"limit": 1}]' |
   nostcat wss://relay.damus.io |
   jq -c 'del(.[1])' |
   nostcat wss://nostr.ono.re
@@ -74,7 +74,7 @@ $ echo '["REQ", "CID", {"limit": 1}]' |
 
 Pipe events from one server to another (for multiple events, `ctrl-C` when finished)
 ```shell
-$ echo '["REQ", "CID", {"limit": 3}]' |
+$ echo '["REQ", "RAND", {"limit": 3}]' |
   nostcat wss://relay.damus.io |
   jq -c 'del(.[1])' |
   nostcat --stream wss://nostr.ono.re
@@ -92,4 +92,12 @@ Building from source (may be unstable)
 ```shell
 $ git clone https://github.com/blakejakopovic/nostcat
 $ cargo build --release
+```
+
+Running inside a Docker image
+```shell
+$ docker build -t nostcat .
+
+# Run the the docker image as an executable
+$ echo '["REQ", "RAND", {"kinds": [1], "limit": 2}]' | docker run --rm -i nostcat wss://relay.damus.io
 ```
