@@ -1,13 +1,12 @@
 #[macro_use]
 extern crate log;
 
+use nostcat::{cli, read_input, request};
 use nostcat::{Config, ServerResponse};
-use nostcat::{cli, request, read_input};
 use tokio::sync::mpsc;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-
     env_logger::init();
 
     let cli_matches = cli().get_matches();
@@ -22,10 +21,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let (tx, mut rx) = mpsc::channel(100);
 
-    let config: Config = Config{
-      connect_timeout: *cli_matches.get_one("connect-timeout").unwrap(),
-      stream: cli_matches.get_flag("stream"),
-      omit_eose: true,
+    let config: Config = Config {
+        connect_timeout: *cli_matches.get_one("connect-timeout").unwrap(),
+        stream: cli_matches.get_flag("stream"),
+        omit_eose: true,
     };
 
     for server in servers {
@@ -35,9 +34,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         info!("Spawning async for -- {}", server);
 
-        tokio::spawn(async move {
-            request(tx2, &server, input, config).await
-        });
+        tokio::spawn(async move { request(tx2, &server, input, config).await });
     }
 
     // drop the original tx, as it was never used
@@ -47,24 +44,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut seen: Vec<String> = vec![];
 
     'recv_loop: loop {
-
         let receive = rx.recv().await;
 
         match receive {
             None => {
                 info!("All websockets channels now closed");
                 break 'recv_loop;
-            },
+            }
 
-            Some(Err(err)) => { eprintln!("{}", err) },
+            Some(Err(err)) => {
+                eprintln!("{}", err)
+            }
 
             Some(Ok(message)) => {
-
                 let server_response: ServerResponse = serde_json::from_str(&message).unwrap();
                 let response = server_response.response;
 
                 if cli_matches.get_flag("unique") {
-
                     if seen.contains(&response) {
                         continue;
                     }
