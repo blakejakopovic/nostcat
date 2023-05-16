@@ -35,6 +35,7 @@ pub enum Response {
     Notice(String),
     Ok(String),
     EOSE(String),
+    Count(String),
     Unsupported(String),
 }
 
@@ -45,6 +46,7 @@ impl Response {
             s if s.starts_with(r#"["NOTICE""#) => Response::Notice(s),
             s if s.starts_with(r#"["OK""#) => Response::Ok(s),
             s if s.starts_with(r#"["EOSE""#) => Response::EOSE(s),
+            s if s.starts_with(r#"["COUNT""#) => Response::Count(s),
             _ => Response::Unsupported(s),
         }
     }
@@ -235,6 +237,21 @@ pub async fn request(
 
                     // Handle NIP-01: NOTICE
                     Response::Notice(data) => {
+                        let server_response = ServerResponse {
+                            source_server: url_str.to_string(),
+                            response: data.clone(),
+                        };
+                        tx.send(Ok(server_response.to_string())).await.unwrap();
+
+                        if !stream {
+                            info!("Closing websocket -- {}: {}", data, url_str);
+                            socket.close(None).unwrap();
+                            break 'run_loop;
+                        }
+                    }
+
+                    // Handle NIP-45: COUNT
+                    Response::Count(data) => {
                         let server_response = ServerResponse {
                             source_server: url_str.to_string(),
                             response: data.clone(),
