@@ -2,31 +2,31 @@
 extern crate log;
 
 use clap::{Arg, ArgAction, Command};
+use serde::{Deserialize, Serialize};
 use std::io::{self, BufRead};
-use tokio::sync::mpsc;
 use std::time::Duration;
+use tokio::sync::mpsc;
 use tungstenite::stream::MaybeTlsStream;
 use tungstenite::{connect, Message};
 use url::Url;
-use serde::{Deserialize, Serialize};
 
 #[derive(Clone)]
 pub struct Config {
-  pub connect_timeout: u64,
-  pub stream: bool,
-  pub omit_eose: bool
+    pub connect_timeout: u64,
+    pub stream: bool,
+    pub omit_eose: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ServerResponse {
-  pub source_server: String,
-  pub response: String,
+    pub source_server: String,
+    pub response: String,
 }
 
 impl ServerResponse {
-  fn to_string(self: Self) -> String {
-    serde_json::to_string(&self).unwrap()
-  }
+    fn to_string(self: Self) -> String {
+        serde_json::to_string(&self).unwrap()
+    }
 }
 
 #[derive(Debug)]
@@ -35,6 +35,7 @@ pub enum Response {
     Notice(String),
     Ok(String),
     EOSE(String),
+    Count(String),
     Unsupported(String),
 }
 
@@ -45,6 +46,7 @@ impl Response {
             s if s.starts_with(r#"["NOTICE""#) => Response::Notice(s),
             s if s.starts_with(r#"["OK""#) => Response::Ok(s),
             s if s.starts_with(r#"["EOSE""#) => Response::EOSE(s),
+            s if s.starts_with(r#"["COUNT""#) => Response::Count(s),
             _ => Response::Unsupported(s),
         }
     }
@@ -103,18 +105,18 @@ pub fn read_input() -> Vec<String> {
     return lines;
 }
 
-pub async fn request (
+pub async fn request(
     tx: mpsc::Sender<Result<String, String>>,
     url_str: &str,
     input: Vec<String>,
     config: Config,
 ) {
-
     let url = match Url::parse(&url_str) {
         Ok(url) => url,
         Err(err) => {
             tx.send(Err(format!("Unable to parse websocket url: {}", err)))
-                .await.unwrap();
+                .await
+                .unwrap();
             return;
         }
     };
@@ -122,9 +124,12 @@ pub async fn request (
     let (mut socket, response) = match connect(url.clone()) {
         Ok((socket, response)) => (socket, response),
         Err(err) => {
-            tx.send(Err(
-                format!("Unable to connect to websocket server: {}", err),
-            )).await.unwrap();
+            tx.send(Err(format!(
+                "Unable to connect to websocket server: {}",
+                err
+            )))
+            .await
+            .unwrap();
             return;
         }
     };
@@ -161,14 +166,14 @@ pub async fn request (
             }
             Err(err) => {
                 tx.send(Err(format!("Failed to write to websocket: {}", err)))
-                    .await.unwrap();
+                    .await
+                    .unwrap();
                 return;
             }
         };
     }
 
     'run_loop: loop {
-
         let msg = socket.read_message();
 
         if let Err(err) = msg.as_ref() {
@@ -178,8 +183,7 @@ pub async fn request (
             if errmsg.contains("Resource temporarily unavailable") {
                 let timeout_msg = format!(
                     "Connection timed out after {}ms while waiting for a response -- {}",
-                    config.connect_timeout,
-                    url_str
+                    config.connect_timeout, url_str
                 );
                 info!("{}", timeout_msg);
                 tx.send(Err(timeout_msg)).await.unwrap();
@@ -197,20 +201,18 @@ pub async fn request (
                 info!("Received data -- {}: {}", url_str, data);
 
                 match Response::from_string(data.clone()) {
-
                     // Handle NIP-15: End of Stored Events Notice
                     Response::EOSE(data) => {
-
                         if !config.omit_eose {
-                          let server_response = ServerResponse {
-                              source_server: url_str.to_string(),
-                              response: data.clone(),
-                          };
-                          tx.send(Ok(server_response.to_string())).await.unwrap();
+                            let server_response = ServerResponse {
+                                source_server: url_str.to_string(),
+                                response: data.clone(),
+                            };
+                            tx.send(Ok(server_response.to_string())).await.unwrap();
                         }
 
                         if !stream {
-                          info!("Closing websocket -- {}: {}", data, url_str);
+                            info!("Closing websocket -- {}: {}", data, url_str);
                             socket.close(None).unwrap();
                             break 'run_loop;
                         }
@@ -220,7 +222,6 @@ pub async fn request (
                     // TODO: when piping relay to relay, we don't want to use --stream
                     //       but also don't want to close the websocket on OK
                     Response::Ok(data) => {
-
                         let server_response = ServerResponse {
                             source_server: url_str.to_string(),
                             response: data.clone(),
@@ -249,6 +250,21 @@ pub async fn request (
                         }
                     }
 
+                    // Handle NIP-45: COUNT
+                    Response::Count(data) => {
+                        let server_response = ServerResponse {
+                            source_server: url_str.to_string(),
+                            response: data.clone(),
+                        };
+                        tx.send(Ok(server_response.to_string())).await.unwrap();
+
+                        if !stream {
+                            info!("Closing websocket -- {}: {}", data, url_str);
+                            socket.close(None).unwrap();
+                            break 'run_loop;
+                        }
+                    }
+
                     Response::Event(data) => {
                         let server_response = ServerResponse {
                             source_server: url_str.to_string(),
@@ -260,7 +276,8 @@ pub async fn request (
                     // Handle unsupported nostr data
                     Response::Unsupported(data) => {
                         tx.send(Err(format!("Received unsupported nostr data: {:?}", data)))
-                            .await.unwrap();
+                            .await
+                            .unwrap();
                     }
                 }
             }
@@ -272,7 +289,8 @@ pub async fn request (
 
             _ => {
                 tx.send(Err(format!("Received non-text websocket data: {:?}", msg)))
-                    .await.unwrap();
+                    .await
+                    .unwrap();
                 return;
             }
         }
