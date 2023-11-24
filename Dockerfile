@@ -21,6 +21,8 @@ RUN echo 'openssl = { version = "0.10", features = ["vendored"] }' >> /app/Cargo
 RUN cargo build --release
 RUN strip /app/target/release/nostcat
 
+# Download glibc library of distroless
+FROM gcr.io/distroless/cc-debian12:latest-amd64 AS glibc
 # We do not need the Rust toolchain to run the binary!
 FROM alpine:3.14 AS runtime
 RUN apk add openssl openssl-dev
@@ -39,4 +41,5 @@ RUN apk del libstdc++ curl
 RUN rm -rf /var/lib/apt/lists/*
 WORKDIR app
 COPY --from=builder /app/target/release/nostcat /usr/local/bin
+COPY --from=glibc /lib/x86_64-linux-gnu/* /usr/glibc-compat/lib/
 ENTRYPOINT ["/usr/local/bin/nostcat"]
